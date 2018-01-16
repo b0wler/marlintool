@@ -1,10 +1,16 @@
 #!/bin/bash
 
+cd
+cd scripts/marlintool
+
 # by mmone with contribution by jhol
 # on github at https://github.com/mmone/marlintool
 
 # Marlin fork optimized for the AnetA8 Prusa clone
-marlinRepositoryUrl="https://github.com/SkyNet3D/Marlin"
+# marlinRepositoryUrl="https://github.com/SkyNet3D/Marlin"
+
+# My custom version of Marlin
+marlinRepositoryUrl="https://github.com/b0wler/Marlin.git"
 
 # Original Marlin
 # marlinRepositoryUrl="https://github.com/MarlinFirmware/Marlin"
@@ -14,7 +20,7 @@ marlinRepositoryUrl="https://github.com/SkyNet3D/Marlin"
 hardwareDefinitionRepo="https://github.com/SkyNet3D/anet-board.git"
 
 # Anet board identifier.
-boardString="anet:avr:anet"
+boardString="anet:avr:aneto"
 
 # Arduino Mega
 # boardString="arduino:avr:mega:cpu=atmega2560"
@@ -34,18 +40,34 @@ case $arch in
 esac
 
 # Serialport for uploading
-port="/dev/ttyUSB0"
+port="/dev/ttyS0"
+
+# Reset pin
+rstpin="22"
+baudrate="115200"
+
+# Where to checkout Marlin sources
+marlinToolDir="/user/pi/scripts/marlintool"
 
 # Where to put the arduino toolchain
 arduinoDir="./arduino"
+#arduinoDir=$marlinToolDir$arduinoDir
 
 # Where to checkout Marlin sources
 marlinDir="Marlin"
+#marlinDir=$marlinToolDir$marlinDir
 
 # Build directory
 buildDir="./build"
+#buildDir=$marlinToolDir$buildDir
 
+# The path to additional hardware defnitions for the arduino tool chain
+# eg. sanguino boards that live in "/arduino/hardware".
+# Set to an empty string if you dont need this.
+hardwareDefintionDirectory="hardware/anet"
 
+configurationDir="configuration"
+#configurationDir=$marlinToolDir$configurationDir
 
 scriptName=$0
 
@@ -190,12 +212,31 @@ restoreMarlinConfiguration()
    exit
 }
 
+### Build Marlin
+#verifyBuild()
+#{
+#   echo -e "\nVerifying build...\n"
+#
+#   ./arduino/arduino --verify --verbose --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+#   exit
+#}
+#
+#
+### Build Marlin and upload 
+#buildAndUpload()
+#{
+#   echo -e "\nBuilding and uploading Marlin build from \"$buildDir\" ...\n"
+#
+#   ./arduino/arduino --upload --port "$port" --verbose --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+#   exit
+#}
+#
 ## Build Marlin
 verifyBuild()
 {
    echo -e "\nVerifying build...\n"
 
-   ./arduino/arduino --verify --verbose --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+   ./arduino/arduino --verify --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
    exit
 }
 
@@ -205,7 +246,27 @@ buildAndUpload()
 {
    echo -e "\nBuilding and uploading Marlin build from \"$buildDir\" ...\n"
 
-   ./arduino/arduino --upload --port "$port" --verbose --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+  ./arduino/arduino --verify --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+   
+   gpio -g write "$rstpin" 0
+   sleep 0.5s
+   gpio -g write "$rstpin" 1  
+   ./arduino/hardware/tools/avr/bin/avrdude -C ./arduino/hardware/tools/avr/etc/avrdude.conf -v -p atmega1284p -c arduino -P /dev/ttyS0 -b "$baudrate" -D -U flash:w:/home/pi/scripts/marlintool/build/Marlin.ino.hex:i
+ 
+   
+   exit
+}
+
+## Upload Marlin
+uploadOnly()
+{
+   echo -e "\nUploading Marlin build from \"$buildDir\" ...\n"
+   
+   gpio -g write "$rstpin" 0
+   sleep 0.5s
+   gpio -g write "$rstpin" 1  
+   ./arduino/hardware/tools/avr/bin/avrdude -C ./arduino/hardware/tools/avr/etc/avrdude.conf -v -p atmega1284p -c arduino -P "$port" -b "$baudrate" -D -U flash:w:./"$buildDir"/Marlin.ino.hex:i
+ 
    exit
 }
 
@@ -234,6 +295,7 @@ printDocu()
    echo " -f, --fetch                 Update an existing Marlin clone."
    echo " -v, --verify                Build without uploading."
    echo " -u, --upload                Build and upload Marlin."
+   echo " -uo, --uploadonly           Upload Marlin only." 
    echo " -b, --backupConfig  [name]  Backup the Marlin configuration to the named backup."
    echo " -r, --restoreConfig [name]  Restore the given configuration into the Marlin directory."
    echo "                               Rename to Configuration.h implicitly."
@@ -264,6 +326,8 @@ while [ "$1" != "" ]; do
                                 ;;
         -u | --upload )         buildAndUpload
                                 ;;
+        -uo | --uploadonly )    uploadOnly		
+                                ;;								
         -b | --backupConfig )   shift
                                 backupMarlinConfiguration $1 exit
                                 ;;
