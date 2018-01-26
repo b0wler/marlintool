@@ -1,7 +1,7 @@
 #!/bin/bash
 
-cd
-cd scripts/marlintool
+#cd
+#cd scripts/marlintool
 
 # by mmone with contribution by jhol
 # on github at https://github.com/mmone/marlintool
@@ -58,7 +58,7 @@ marlinDir="Marlin"
 #marlinDir=$marlinToolDir$marlinDir
 
 # Build directory
-buildDir="./build"
+buildDir="build"
 #buildDir=$marlinToolDir$buildDir
 
 # The path to additional hardware defnitions for the arduino tool chain
@@ -246,11 +246,9 @@ buildAndUpload()
 {
    echo -e "\nBuilding and uploading Marlin build from \"$buildDir\" ...\n"
 
-  ./arduino/arduino --verify --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
+   ./arduino/arduino --verify --board "$boardString" "$marlinDir"/Marlin/Marlin.ino --pref build.path="$buildDir"
    
-   gpio -g write "$rstpin" 0
-   sleep 0.5s
-   gpio -g write "$rstpin" 1  
+   resetarduino
    ./arduino/hardware/tools/avr/bin/avrdude -C ./arduino/hardware/tools/avr/etc/avrdude.conf -v -p atmega1284p -c arduino -P /dev/ttyS0 -b "$baudrate" -D -U flash:w:/home/pi/scripts/marlintool/build/Marlin.ino.hex:i
  
    
@@ -262,9 +260,7 @@ uploadOnly()
 {
    echo -e "\nUploading Marlin build from \"$buildDir\" ...\n"
    
-   gpio -g write "$rstpin" 0
-   sleep 0.5s
-   gpio -g write "$rstpin" 1  
+   resetarduino  
    ./arduino/hardware/tools/avr/bin/avrdude -C ./arduino/hardware/tools/avr/etc/avrdude.conf -v -p atmega1284p -c arduino -P "$port" -b "$baudrate" -D -U flash:w:./"$buildDir"/Marlin.ino.hex:i
  
    exit
@@ -277,6 +273,15 @@ cleanEverything()
    rm -Rf "$arduinoDir"
    rm -Rf "$marlinDir"
    rm -Rf "$buildDir"
+}
+
+## Reset arduino 
+resetarduino()
+{
+   echo -e "Resetting Arduino board...\n"
+   gpio -g write "$rstpin" 0
+   sleep 0.5s
+   gpio -g write "$rstpin" 1 
 }
 
 ## Print help
@@ -302,6 +307,7 @@ printDocu()
    echo " -c, --clean                 Cleanup everything. Remove Marlin sources and Arduino toolchain"
    echo " -p, --port [port]           Set the serialport for uploading the firmware."
    echo "                               Overrides the default in the script."
+   echo " -rs, --reset				  Reset Arduino."
    echo " -h, --help                  Show this doc."
    echo
    exit
@@ -337,6 +343,8 @@ while [ "$1" != "" ]; do
         -c | --clean )          shift
                                 cleanEverything 
                                 ;;
+        -rs | --reset )         resetarduino 
+                                ;;								
         -h | --help )           printDocu
                                 ;;
         * )                     printDocu
